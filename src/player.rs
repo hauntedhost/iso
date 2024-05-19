@@ -3,6 +3,7 @@ use crate::cameras::SceneCamera;
 use crate::schedule::{StartupSet, UpdateSet};
 use crate::terrain::Terrain;
 use bevy::prelude::*;
+use rand::Rng;
 
 const PLAYER_SIZE: f32 = 0.2;
 
@@ -51,8 +52,26 @@ fn spawn_player(
         return;
     };
 
-    let terrain_top_y = terrain_transform.translation.y + (terrain.height / 2.0);
+    let Terrain {
+        width: terrain_width,
+        height: terrain_height,
+        depth: terrain_depth,
+    } = terrain;
+
+    // Pin player to top of the terrain
+    let terrain_top_y = terrain_transform.translation.y + (terrain_height / 2.0);
     let player_y = terrain_top_y + (PLAYER_SIZE / 2.0);
+
+    // Randomly place the player within width/depth bounds of the terrain
+    let mut rng = rand::thread_rng();
+    let player_x = rng.gen_range(
+        terrain_transform.translation.x - terrain_width / 2.0
+            ..terrain_transform.translation.x + terrain_width / 2.0,
+    );
+    let player_z = rng.gen_range(
+        terrain_transform.translation.z - terrain_depth / 2.0
+            ..terrain_transform.translation.z + terrain_depth / 2.0,
+    );
 
     // Player cube
     commands.spawn((
@@ -60,7 +79,7 @@ fn spawn_player(
             mesh: meshes.add(Cuboid::default()),
             material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
             transform: Transform {
-                translation: Vec3::new(2.25, player_y, 2.25),
+                translation: Vec3::new(player_x, player_y, player_z),
                 scale: Vec3::splat(PLAYER_SIZE),
                 ..default()
             },

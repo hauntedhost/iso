@@ -1,11 +1,15 @@
 use crate::schedule::PreStartupSet;
 use bevy::prelude::*;
 
+const TERRAIN_WIDTH: f32 = 5.0;
 const TERRAIN_HEIGHT: f32 = 0.3;
+const TERRAIN_DEPTH: f32 = 5.0;
 
 #[derive(Component, Debug)]
 pub struct Terrain {
+    pub width: f32,
     pub height: f32,
+    pub depth: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -43,7 +47,7 @@ fn spawn_terrain(
 ) {
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(Cuboid::new(5.0, TERRAIN_HEIGHT, 5.0)),
+            mesh: meshes.add(Cuboid::new(TERRAIN_WIDTH, TERRAIN_HEIGHT, TERRAIN_DEPTH)),
             material: materials.add(StandardMaterial {
                 base_color: Color::rgb(0.3, 0.5, 0.3),
                 ..default()
@@ -54,7 +58,9 @@ fn spawn_terrain(
         },
         // Include height in tag so other queries can use this instead of TERRAIN_HEIGHT
         Terrain {
+            width: TERRAIN_WIDTH,
             height: TERRAIN_HEIGHT,
+            depth: TERRAIN_DEPTH,
         },
     ));
 }
