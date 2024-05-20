@@ -1,6 +1,8 @@
-// use crate::{cameras::SceneCamera, schedule::UpdateSet, Terrain};
 use crate::cameras::SceneCamera;
 use crate::schedule::{StartupSet, UpdateSet};
+use crate::socket::client::SocketStatus;
+use crate::socket::request::Request;
+use crate::socket::{GameSocket, GAME_ROOM};
 use crate::terrain::Terrain;
 use bevy::prelude::*;
 use rand::Rng;
@@ -39,8 +41,13 @@ impl Plugin for PlayerPlugin {
                 Update,
                 update_player_position.in_set(UpdateSet::UserInputEffects),
             );
+        // .add_systems(Update, update_other_players);
     }
 }
+
+// TODO: dynamically spawn and move players from socket.users != user
+// fn update_other_players(mut socket: ResMut<GameSocket>, user: Res<User>) {
+// }
 
 fn spawn_player(
     mut commands: Commands,
@@ -96,6 +103,7 @@ fn update_player_position(
     mut player_query: Query<&mut Transform, (With<Player>, Without<SceneCamera>)>,
     camera_query: Query<&Transform, (With<SceneCamera>, Without<Player>)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
+    socket: ResMut<GameSocket>,
 ) {
     let Ok(camera_transform) = camera_query.get_single() else {
         return;
@@ -135,8 +143,13 @@ fn update_player_position(
         }
 
         if did_transform {
-            // dbg!(player_transform);
-            // dbg!(forward.length(), right.length());
+            if let Some(status) = &socket.status {
+                if *status == SocketStatus::Connected {
+                    let request =
+                        Request::new_shout_location(GAME_ROOM.into(), player_transform.translation);
+                    socket.handle.call(request).expect("shout request error");
+                }
+            }
         }
     }
 }
