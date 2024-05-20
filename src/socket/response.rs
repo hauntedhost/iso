@@ -1,4 +1,5 @@
 use super::{message::Message, room::Room, user::User};
+use bevy::log::prelude::*;
 use bevy::math::Vec3;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -6,19 +7,17 @@ use std::collections::HashMap;
 /// This module contains logic for parsing JSON from the server.
 /// Response struct exposes a single `new_from_json_string` fn which takes a JSON string and returns a `Response` enum.
 
-// TODO: handle PhxReply messages:
-// [null,3,"phoenix","phx_reply",{"status":"ok","response":{}}]
-
 // The Response enum we will build based on the event type
 #[derive(Clone, Default, Debug)]
 pub enum Response {
-    #[default]
-    Unknown,
+    Ack(Ack),
     JoinReply(JoinReply),
     RoomsUpdate(RoomsUpdate),
     Shout(Shout),
     PresenceDiff(PresenceDiff),
     PresenceState(PresenceState),
+    #[default]
+    Unknown,
 }
 
 impl Response {
@@ -27,14 +26,23 @@ impl Response {
             return Response::Unknown;
         };
 
+        debug!("message={:?}", message);
+
         return match message.event.as_str() {
             "phx_reply" => {
-                // currently only handling phx_join response.event
-                if let Ok(reply) = serde_json::from_value::<RawReply>(message.payload) {
-                    if reply.response.event == "phx_join" {
-                        return Response::JoinReply(JoinReply {
-                            user: reply.response.user,
+                if message.topic == "phoenix" {
+                    if let Ok(reply) = serde_json::from_value::<RawAckReply>(message.payload) {
+                        return Response::Ack(Ack {
+                            status: reply.status,
                         });
+                    }
+                } else {
+                    if let Ok(reply) = serde_json::from_value::<RawJoinReply>(message.payload) {
+                        if reply.response.event == "phx_join" {
+                            return Response::JoinReply(JoinReply {
+                                user: reply.response.user,
+                            });
+                        }
                     }
                 }
                 Response::Unknown
@@ -74,6 +82,11 @@ impl Response {
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
+pub struct Ack {
+    pub status: String,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct JoinReply {
     pub user: User,
 }
@@ -101,13 +114,18 @@ pub struct Shout {
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
-struct RawReply {
+struct RawAckReply {
     status: String,
-    response: RawReplyResponse,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
-struct RawReplyResponse {
+struct RawJoinReply {
+    status: String,
+    response: RawJoinReplyResponse,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug)]
+struct RawJoinReplyResponse {
     event: String,
     user: User,
 }

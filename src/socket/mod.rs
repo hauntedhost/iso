@@ -18,10 +18,24 @@ use bevy::text::BreakLineOn;
 use tokio::sync::mpsc::Receiver;
 
 pub const GAME_ROOM: &str = "iso";
+pub const HEARTBEAT_INTERVAL: f32 = 15.0;
 
 #[derive(Component)]
 struct SocketInfo {
     text_section: TextSection,
+}
+
+#[derive(Resource, Debug)]
+pub struct HeartbeatTimer {
+    timer: Timer,
+}
+
+impl Default for HeartbeatTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(HEARTBEAT_INTERVAL, TimerMode::Repeating),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -50,11 +64,25 @@ impl Plugin for SocketPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(User::new_from_env_or_generate())
             .insert_resource(GameSocket::new())
-            // TODO: add heartbeat update on a 30s timer
-            .add_systems(Update, hello_socket)
+            .insert_resource(HeartbeatTimer::default())
             .add_systems(Startup, spawn_socket_info)
-            .add_systems(Update, update_socket_info);
+            .add_systems(Update, hello_socket)
+            .add_systems(Update, update_socket_info)
+            .add_systems(Update, send_heartbeat);
     }
+}
+
+fn send_heartbeat(
+    mut heartbeat_timer: ResMut<HeartbeatTimer>,
+    time: Res<Time>,
+    socket: Res<GameSocket>,
+) {
+    heartbeat_timer.timer.tick(time.delta());
+    if !heartbeat_timer.timer.just_finished() {
+        return;
+    }
+    let request = Request::new_heartbeat();
+    socket.handle.call(request).expect("heartbeat error");
 }
 
 fn spawn_socket_info(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -176,9 +204,6 @@ impl GameSocket {
     }
 
     pub fn add_user(&mut self, user: User) {
-        // if !self.users.iter().any(|u| u.uuid == user.uuid) {
-        //     self.users.push(user);
-        // }
         if let Some(existing_user) = self.users.iter_mut().find(|u| u.uuid == user.uuid) {
             *existing_user = user;
         } else {
@@ -207,7 +232,7 @@ fn hello_socket(mut socket: ResMut<GameSocket>, user: Res<User>) {
             SocketEvent::ConnectFail => socket.status = Some(SocketStatus::ConnectFailed),
             SocketEvent::Disconnect => socket.status = Some(SocketStatus::Disconnected),
             SocketEvent::Response(response) => {
-                debug!("response={:?}", &response);
+                info!("response={:?}", &response);
                 socket.last_response = Some(response.clone());
 
                 match response {
