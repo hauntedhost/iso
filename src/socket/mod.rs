@@ -15,6 +15,7 @@ use self::user::User;
 use crate::socket::connection::{connect_socket, create_channel, get_socket_url};
 use bevy::prelude::*;
 use bevy::text::BreakLineOn;
+use bevy::utils::HashMap;
 use tokio::sync::mpsc::Receiver;
 
 pub const GAME_ROOM: &str = "iso";
@@ -135,12 +136,12 @@ fn update_socket_info(
     let users: Vec<String> = socket
         .users
         .iter()
-        .map(|u| {
-            let position = match u.position {
+        .map(|(_uuid, user)| {
+            let position = match user.position {
                 Some(pos) => format!("({:.2}, {:.2})", pos.x, pos.z),
                 None => "()".to_string(),
             };
-            format!("@{} {}", u.username, position)
+            format!("@{} {}", user.username, position)
         })
         .collect();
 
@@ -158,7 +159,7 @@ fn update_socket_info(
 
 #[derive(Debug, Resource)]
 pub struct GameSocket {
-    pub users: Vec<User>,
+    pub users: HashMap<String, User>,
     pub status: Option<SocketStatus>,
     pub last_response: Option<Response>,
     pub handle: ezsockets::Client<Client>,
@@ -192,31 +193,29 @@ impl GameSocket {
             rx,
             status: None,
             last_response: None,
-            users: vec![],
+            users: HashMap::new(),
             _runtime: runtime,
         }
     }
 
-    pub fn update_user_position(&mut self, user: User, position: Vec3) {
-        let mut new_user = user.clone();
-        new_user.position = Some(position);
-        self.add_user(new_user);
-    }
-
     pub fn add_user(&mut self, user: User) {
-        if let Some(existing_user) = self.users.iter_mut().find(|u| u.uuid == user.uuid) {
-            *existing_user = user;
-        } else {
-            self.users.push(user);
-        }
+        self.users.insert(user.uuid.clone(), user.clone());
     }
 
     pub fn remove_user(&mut self, user: User) {
-        self.users.retain(|u| u.uuid != user.uuid);
+        self.users.remove(&user.uuid);
     }
 
     pub fn set_users(&mut self, users: Vec<User>) {
-        self.users = users;
+        for user in users {
+            self.add_user(user);
+        }
+    }
+
+    pub fn update_user_position(&mut self, user: User, position: Vec3) {
+        if let Some(user) = self.users.get_mut(&user.uuid) {
+            user.position = Some(position);
+        }
     }
 }
 
