@@ -10,7 +10,12 @@ use rand::Rng;
 const PLAYER_SIZE: f32 = 0.2;
 
 #[derive(Component, Debug)]
-pub struct Player;
+pub struct PlayerTag;
+
+#[derive(Component, Debug)]
+pub struct FriendTag {
+    pub player_uuid: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct Config;
@@ -43,7 +48,12 @@ impl Plugin for PlayerPlugin {
                     .chain()
                     .in_set(UpdateSet::UserInputEffects),
             )
-            .add_event::<PlayerUpdateEvent>();
+            .add_systems(
+                Update,
+                (spawn_friends, despawn_friends, update_friend_positions),
+            )
+            .add_event::<PlayerUpdateEvent>()
+            .add_event::<FriendUpdateEvent>();
     }
 }
 
@@ -55,6 +65,21 @@ pub struct PlayerUpdateEvent {
 impl PlayerUpdateEvent {
     pub fn new(new_position: Vec3) -> Self {
         Self { new_position }
+    }
+}
+
+#[derive(Event, Debug)]
+pub struct FriendUpdateEvent {
+    pub player_uuid: String,
+    pub new_position: Vec3,
+}
+
+impl FriendUpdateEvent {
+    pub fn new(player_uuid: String, new_position: Vec3) -> Self {
+        Self {
+            player_uuid,
+            new_position,
+        }
     }
 }
 
@@ -106,7 +131,7 @@ fn spawn_player(
             },
             ..default()
         },
-        Player,
+        PlayerTag,
     ));
 }
 
@@ -138,8 +163,8 @@ const MOVEMENT_X_SPEED: f32 = 0.085;
 const MOVEMENT_Z_SPEED: f32 = 0.125;
 
 fn update_player_position(
-    mut player_query: Query<&mut Transform, (With<Player>, Without<SceneCamera>)>,
-    camera_query: Query<&Transform, (With<SceneCamera>, Without<Player>)>,
+    mut player_query: Query<&mut Transform, (With<PlayerTag>, Without<SceneCamera>)>,
+    camera_query: Query<&Transform, (With<SceneCamera>, Without<PlayerTag>)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut event_writer: EventWriter<PlayerUpdateEvent>,
 ) {
@@ -150,6 +175,7 @@ fn update_player_position(
     let forward = Vec3::from(camera_transform.forward());
     let right = Vec3::from(camera_transform.right());
 
+    // TODO: there should really just be one player
     for mut player_position in player_query.iter_mut() {
         let mut direction = Vec3::ZERO;
         let mut did_transform = false;
@@ -182,5 +208,85 @@ fn update_player_position(
         if did_transform {
             event_writer.send(PlayerUpdateEvent::new(player_position.translation));
         }
+    }
+}
+
+fn spawn_friends(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut update_event_reader: EventReader<FriendUpdateEvent>,
+    mut socket: ResMut<GameSocket>,
+) {
+    for FriendUpdateEvent {
+        player_uuid,
+        new_position,
+    } in update_event_reader.read()
+    {
+        // Skip if player is self
+        if player_uuid.clone() == socket.player.uuid {
+            continue;
+        }
+
+        // Skip if player already spawned
+        if socket.has_spawned(player_uuid) {
+            continue;
+        }
+
+        // Spawn new player
+        socket.set_spawned_at(player_uuid);
+
+        commands.spawn((
+            PbrBundle {
+                mesh: meshes.add(Cuboid::default()),
+                material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
+                transform: Transform {
+                    translation: new_position.clone(),
+                    scale: Vec3::splat(PLAYER_SIZE),
+                    ..default()
+                },
+                ..default()
+            },
+            FriendTag {
+                player_uuid: player_uuid.clone(),
+            },
+        ));
+    }
+}
+
+fn update_friend_positions(
+    mut friend_query: Query<(&mut Transform, &FriendTag), With<FriendTag>>,
+    socket: Res<GameSocket>,
+) {
+    for (mut current_position, friend_tag) in friend_query.iter_mut() {
+        // Skip unless player can be found in friends
+        let Some(player) = socket.friends.get(&friend_tag.player_uuid) else {
+            continue;
+        };
+
+        // Skip unless friend position exists
+        let Some(new_position) = player.position else {
+            continue;
+        };
+
+        // Skip if no position change
+        if current_position.translation == new_position {
+            continue;
+        }
+
+        current_position.translation = new_position;
+    }
+}
+
+fn despawn_friends(
+    mut commands: Commands,
+    friend_query: Query<(Entity, &FriendTag), With<FriendTag>>,
+    socket: Res<GameSocket>,
+) {
+    for (entity, friend_tag) in friend_query.iter() {
+        // Despawn friend entities that cannot be found in socket.friends
+        if socket.friends.get(&friend_tag.player_uuid).is_none() {
+            commands.entity(entity).despawn_recursive();
+        };
     }
 }

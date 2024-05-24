@@ -12,11 +12,13 @@ use self::client::{Client, SocketEvent, SocketStatus};
 use self::player::Player;
 use self::request::Request;
 use self::response::Response;
+use crate::player::FriendUpdateEvent;
 use crate::schedule::UpdateSet;
 use crate::socket::connection::{connect_socket, create_channel, get_socket_url};
 use bevy::prelude::*;
 use bevy::text::BreakLineOn;
 use bevy::utils::HashMap;
+use chrono::Utc;
 use tokio::sync::mpsc::Receiver;
 
 pub const GAME_ROOM: &str = "iso";
@@ -212,6 +214,10 @@ impl GameSocket {
         }
     }
 
+    pub fn remove_friend(&mut self, friend: Player) {
+        self.friends.remove(&friend.uuid);
+    }
+
     pub fn upsert_player(&mut self, player: Player) {
         if player.uuid == self.player.uuid {
             if player.position.is_some() {
@@ -229,10 +235,6 @@ impl GameSocket {
         }
     }
 
-    pub fn remove_friend(&mut self, friend: Player) {
-        self.friends.remove(&friend.uuid);
-    }
-
     pub fn upsert_players(&mut self, players: Vec<Player>) {
         for player in players {
             self.upsert_player(player);
@@ -246,9 +248,28 @@ impl GameSocket {
             friend.position = Some(position);
         }
     }
+
+    pub fn has_spawned(&mut self, player_uuid: &String) -> bool {
+        if let Some(player) = self.friends.get(player_uuid) {
+            player.spawned_at.is_some()
+        } else {
+            false
+        }
+    }
+
+    pub fn set_spawned_at(&mut self, player_uuid: &String) {
+        if let Some(player) = self.friends.get_mut(player_uuid) {
+            let now = Utc::now();
+            let timestamp = now.timestamp() as u64;
+            player.spawned_at = Some(timestamp);
+        }
+    }
 }
 
-fn handle_socket_events(mut socket: ResMut<GameSocket>) {
+fn handle_socket_events(
+    mut socket: ResMut<GameSocket>,
+    mut update_event_writer: EventWriter<FriendUpdateEvent>,
+) {
     match socket.rx.try_recv() {
         Ok(socket_event) => match socket_event {
             SocketEvent::Close => socket.status = Some(SocketStatus::Closed),
@@ -265,20 +286,34 @@ fn handle_socket_events(mut socket: ResMut<GameSocket>) {
                 match response {
                     Response::PlayerUpdate(player_update) => {
                         socket.update_player_position(
+                            player_update.player_uuid.clone(),
+                            player_update.position.clone(),
+                        );
+                        update_event_writer.send(FriendUpdateEvent::new(
                             player_update.player_uuid,
                             player_update.position,
-                        );
+                        ));
                     }
                     Response::PresenceDiff(diff) => {
                         for player in diff.joins {
-                            socket.upsert_player(player);
+                            socket.upsert_player(player.clone());
+                            if let Some(position) = player.position {
+                                update_event_writer
+                                    .send(FriendUpdateEvent::new(player.uuid, position));
+                            }
                         }
                         for player in diff.leaves {
                             socket.remove_friend(player);
                         }
                     }
                     Response::PresenceState(state) => {
-                        socket.upsert_players(state.players);
+                        socket.upsert_players(state.players.clone());
+                        for player in state.players {
+                            if let Some(position) = player.position {
+                                update_event_writer
+                                    .send(FriendUpdateEvent::new(player.uuid, position));
+                            }
+                        }
                     }
                     Response::Shout(_shout) => (),
                     _ => (),

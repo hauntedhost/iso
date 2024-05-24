@@ -8,6 +8,7 @@ pub struct Player {
     pub uuid: String,
     pub username: String,
     pub position: Option<Vec3>,
+    pub spawned_at: Option<u64>,
     pub joined_at: u64,
     pub updated_at: u64,
 }

@@ -1,5 +1,5 @@
 use crate::cameras::SceneCamera;
-use crate::player::Player;
+use crate::player::PlayerTag;
 use crate::schedule::{PreStartupSet, UpdateSet};
 use bevy::prelude::*;
 
@@ -97,8 +97,8 @@ fn spawn_lights(mut commands: Commands) {
 }
 
 fn follow_player_with_spotlight(
-    mut player_light_query: Query<&mut Transform, (With<PlayerLight>, Without<Player>)>,
-    player_query: Query<&mut Transform, (With<Player>, Without<PlayerLight>)>,
+    mut player_light_query: Query<&mut Transform, (With<PlayerLight>, Without<PlayerTag>)>,
+    player_query: Query<&mut Transform, (With<PlayerTag>, Without<PlayerLight>)>,
 ) {
     let (Ok(mut player_light_transform), Ok(player_transform)) = (
         player_light_query.get_single_mut(),
