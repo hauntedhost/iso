@@ -58,8 +58,6 @@ impl ezsockets::ClientExt for Client {
     type Call = Request;
 
     async fn on_text(&mut self, text: String) -> Result<(), SocketError> {
-        debug!("on_text={text}");
-
         // Relay message from server to channel
         let response = SocketEvent::Response(Response::new_from_json_string(&text));
         if let Err(e) = self.tx.send(response).await {

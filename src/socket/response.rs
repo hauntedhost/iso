@@ -1,5 +1,4 @@
-use super::{message::Message, room::Room, user::User};
-use bevy::log::prelude::*;
+use super::{message::Message, player::Player, room::Room};
 use bevy::math::Vec3;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,10 +11,11 @@ use std::collections::HashMap;
 pub enum Response {
     Ack(Ack),
     JoinReply(JoinReply),
-    RoomsUpdate(RoomsUpdate),
-    Shout(Shout),
+    PlayerUpdate(PlayerUpdate),
     PresenceDiff(PresenceDiff),
     PresenceState(PresenceState),
+    RoomsUpdate(RoomsUpdate),
+    Shout(Shout),
     #[default]
     Unknown,
 }
@@ -25,8 +25,6 @@ impl Response {
         let Ok(message) = Message::new_from_json_string(json_data) else {
             return Response::Unknown;
         };
-
-        debug!("message={:?}", message);
 
         return match message.event.as_str() {
             "phx_reply" => {
@@ -40,24 +38,29 @@ impl Response {
                     if let Ok(reply) = serde_json::from_value::<RawJoinReply>(message.payload) {
                         if reply.response.event == "phx_join" {
                             return Response::JoinReply(JoinReply {
-                                user: reply.response.user,
+                                player: reply.response.player,
                             });
                         }
                     }
                 }
                 Response::Unknown
             }
+            "player_update" => {
+                let player_update =
+                    serde_json::from_value::<PlayerUpdate>(message.payload).unwrap();
+                Response::PlayerUpdate(player_update)
+            }
             "presence_diff" => {
                 let raw_diff = serde_json::from_value::<RawPresenceDiff>(message.payload).unwrap();
-                let joins = extract_first_users(raw_diff.joins);
-                let leaves = extract_first_users(raw_diff.leaves);
+                let joins = get_players(raw_diff.joins);
+                let leaves = get_players(raw_diff.leaves);
                 Response::PresenceDiff(PresenceDiff { joins, leaves })
             }
             "presence_state" => {
                 let raw_state =
                     serde_json::from_value::<RawPresenceState>(message.payload).unwrap();
-                let users = extract_first_users(raw_state);
-                Response::PresenceState(PresenceState { users })
+                let players = get_players(raw_state);
+                Response::PresenceState(PresenceState { players })
             }
             "rooms_update" => {
                 let rooms_update =
@@ -67,7 +70,7 @@ impl Response {
                     .iter()
                     .map(|room_update| Room {
                         name: room_update.0.clone(),
-                        user_count: room_update.1,
+                        player_count: room_update.1,
                     })
                     .collect();
                 Response::RoomsUpdate(rooms)
@@ -88,18 +91,24 @@ pub struct Ack {
 
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct JoinReply {
-    pub user: User,
+    pub player: Player,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
+pub struct PlayerUpdate {
+    pub player_uuid: String,
+    pub position: Vec3,
 }
 
 #[derive(Clone, Default, Debug)]
 pub struct PresenceDiff {
-    pub joins: Vec<User>,
-    pub leaves: Vec<User>,
+    pub joins: Vec<Player>,
+    pub leaves: Vec<Player>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct PresenceState {
-    pub users: Vec<User>,
+    pub players: Vec<Player>,
 }
 
 pub type RoomsUpdate = Vec<Room>;
@@ -108,7 +117,7 @@ pub type RoomsUpdate = Vec<Room>;
 
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct Shout {
-    pub user: User,
+    pub player: Player,
     pub message: String,
     pub position: Option<Vec3>,
 }
@@ -127,7 +136,7 @@ struct RawJoinReply {
 #[derive(Default, Serialize, Deserialize, Debug)]
 struct RawJoinReplyResponse {
     event: String,
-    user: User,
+    player: Player,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
@@ -137,29 +146,33 @@ struct RawRoomsUpdate {
 
 type RoomUpdateArray = (
     String, // name
-    u32,    // user count
+    u32,    // player count
 );
 
 #[derive(Default, Serialize, Deserialize, Debug)]
 struct RawPresenceDiff {
-    joins: HashMap<String, UserPresence>,
-    leaves: HashMap<String, UserPresence>,
+    joins: HashMap<String, PlayerPresence>,
+    leaves: HashMap<String, PlayerPresence>,
 }
 
-type RawPresenceState = HashMap<String, UserPresence>;
+type RawPresenceState = HashMap<String, PlayerPresence>;
 
 #[derive(Serialize, Deserialize, Debug)]
-struct UserPresence {
-    metas: Vec<User>,
+struct PlayerMeta {
+    uuid: String,
+    username: String,
 }
 
-// A user can be "present" from multiple devices, we only care about the first one right now
-fn extract_first_users(joins: HashMap<String, UserPresence>) -> Vec<User> {
-    let mut users = Vec::new();
-    for (_key, user_presence) in joins {
-        if let Some(first_user) = user_presence.metas.get(0) {
-            users.push(first_user.clone());
-        }
+#[derive(Serialize, Deserialize, Debug)]
+struct PlayerPresence {
+    metas: Vec<PlayerMeta>,
+    player: Player,
+}
+
+fn get_players(player_presences: HashMap<String, PlayerPresence>) -> Vec<Player> {
+    let mut players = Vec::new();
+    for (_key, player_presence) in player_presences {
+        players.push(player_presence.player);
     }
-    users
+    players
 }

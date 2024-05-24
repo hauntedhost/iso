@@ -2,16 +2,17 @@ pub mod client;
 pub mod connection;
 pub mod message;
 pub mod names;
+pub mod player;
 pub mod refs;
 pub mod request;
 pub mod response;
 pub mod room;
-pub mod user;
 
 use self::client::{Client, SocketEvent, SocketStatus};
+use self::player::Player;
 use self::request::Request;
 use self::response::Response;
-use self::user::User;
+use crate::schedule::UpdateSet;
 use crate::socket::connection::{connect_socket, create_channel, get_socket_url};
 use bevy::prelude::*;
 use bevy::text::BreakLineOn;
@@ -63,12 +64,15 @@ impl Default for SocketPlugin {
 
 impl Plugin for SocketPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(User::new_from_env_or_generate())
-            .insert_resource(GameSocket::new())
+        app.insert_resource(GameSocket::new())
             .insert_resource(HeartbeatTimer::default())
             .add_systems(Startup, spawn_socket_info)
-            .add_systems(Update, hello_socket)
-            .add_systems(Update, update_socket_info)
+            .add_systems(
+                Update,
+                (handle_socket_events, update_socket_info)
+                    .chain()
+                    .in_set(UpdateSet::AfterEffects),
+            )
             .add_systems(Update, send_heartbeat);
     }
 }
@@ -133,15 +137,15 @@ fn update_socket_info(
         return;
     };
 
-    let users: Vec<String> = socket
-        .users
+    let friends: Vec<String> = socket
+        .friends
         .iter()
-        .map(|(_uuid, user)| {
-            let position = match user.position {
+        .map(|(_uuid, player)| {
+            let position = match player.position {
                 Some(pos) => format!("({:.2}, {:.2})", pos.x, pos.z),
                 None => "()".to_string(),
             };
-            format!("@{} {}", user.username, position)
+            format!("@{} {}", player.username, position)
         })
         .collect();
 
@@ -150,7 +154,15 @@ fn update_socket_info(
         None => "None".to_string(),
     };
 
-    let info_text = format!("status={status} users={:?}", users);
+    let position = match socket.player.position {
+        Some(pos) => format!("({:.2}, {:.2})", pos.x, pos.z),
+        None => "()".to_string(),
+    };
+
+    let info_text = format!(
+        "{status} @{} {} friends={:?}",
+        socket.player.username, position, friends
+    );
 
     let mut text_section = socket_info.text_section.clone();
     text_section.value = info_text;
@@ -159,7 +171,8 @@ fn update_socket_info(
 
 #[derive(Debug, Resource)]
 pub struct GameSocket {
-    pub users: HashMap<String, User>,
+    pub player: Player,
+    pub friends: HashMap<String, Player>,
     pub status: Option<SocketStatus>,
     pub last_response: Option<Response>,
     pub handle: ezsockets::Client<Client>,
@@ -193,64 +206,81 @@ impl GameSocket {
             rx,
             status: None,
             last_response: None,
-            users: HashMap::new(),
+            player: Player::new_from_env_or_generate(),
+            friends: HashMap::new(),
             _runtime: runtime,
         }
     }
 
-    pub fn add_user(&mut self, user: User) {
-        self.users.insert(user.uuid.clone(), user.clone());
-    }
-
-    pub fn remove_user(&mut self, user: User) {
-        self.users.remove(&user.uuid);
-    }
-
-    pub fn set_users(&mut self, users: Vec<User>) {
-        for user in users {
-            self.add_user(user);
+    pub fn upsert_player(&mut self, player: Player) {
+        if player.uuid == self.player.uuid {
+            if player.position.is_some() {
+                self.player.position = player.position;
+            }
+        } else {
+            self.friends
+                .entry(player.uuid.clone())
+                .and_modify(|existing_friend| {
+                    if player.position.is_some() {
+                        existing_friend.position = player.position;
+                    }
+                })
+                .or_insert_with(|| player.clone());
         }
     }
 
-    pub fn update_user_position(&mut self, user: User, position: Vec3) {
-        if let Some(user) = self.users.get_mut(&user.uuid) {
-            user.position = Some(position);
+    pub fn remove_friend(&mut self, friend: Player) {
+        self.friends.remove(&friend.uuid);
+    }
+
+    pub fn upsert_players(&mut self, players: Vec<Player>) {
+        for player in players {
+            self.upsert_player(player);
+        }
+    }
+
+    pub fn update_player_position(&mut self, uuid: String, position: Vec3) {
+        if uuid == self.player.uuid {
+            self.player.position = Some(position);
+        } else if let Some(friend) = self.friends.get_mut(&uuid) {
+            friend.position = Some(position);
         }
     }
 }
 
-fn hello_socket(mut socket: ResMut<GameSocket>, user: Res<User>) {
+fn handle_socket_events(mut socket: ResMut<GameSocket>) {
     match socket.rx.try_recv() {
         Ok(socket_event) => match socket_event {
             SocketEvent::Close => socket.status = Some(SocketStatus::Closed),
             SocketEvent::Connect => {
                 socket.status = Some(SocketStatus::Connected);
-                let request = Request::new_join(GAME_ROOM.into(), user.clone());
+                let request = Request::new_join(GAME_ROOM.into(), socket.player.clone());
                 socket.handle.call(request).expect("join error");
             }
             SocketEvent::ConnectFail => socket.status = Some(SocketStatus::ConnectFailed),
             SocketEvent::Disconnect => socket.status = Some(SocketStatus::Disconnected),
             SocketEvent::Response(response) => {
-                info!("response={:?}", &response);
                 socket.last_response = Some(response.clone());
 
                 match response {
+                    Response::PlayerUpdate(player_update) => {
+                        socket.update_player_position(
+                            player_update.player_uuid,
+                            player_update.position,
+                        );
+                    }
                     Response::PresenceDiff(diff) => {
-                        for user in diff.joins {
-                            socket.add_user(user);
+                        for player in diff.joins {
+                            socket.upsert_player(player);
                         }
-                        for user in diff.leaves {
-                            socket.remove_user(user);
+                        for player in diff.leaves {
+                            socket.remove_friend(player);
                         }
                     }
                     Response::PresenceState(state) => {
-                        socket.set_users(state.users);
+                        socket.upsert_players(state.players);
                     }
-                    Response::Shout(shout) => {
-                        if let Some(position) = shout.position {
-                            socket.update_user_position(shout.user, position);
-                        }
-                    }
+                    Response::Shout(_shout) => (),
                     _ => (),
                 }
             }

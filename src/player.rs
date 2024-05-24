@@ -39,21 +39,31 @@ impl Plugin for PlayerPlugin {
         app.add_systems(Startup, spawn_player.in_set(StartupSet::SpawnEntities))
             .add_systems(
                 Update,
-                update_player_position.in_set(UpdateSet::UserInputEffects),
-            );
-        // .add_systems(Update, update_other_players);
+                (update_player_position, broadcast_player_update)
+                    .chain()
+                    .in_set(UpdateSet::UserInputEffects),
+            )
+            .add_event::<PlayerUpdateEvent>();
     }
 }
 
-// TODO: dynamically spawn and move players from socket.users != user
-// fn update_other_players(mut socket: ResMut<GameSocket>, user: Res<User>) {
-// }
+#[derive(Event, Debug)]
+pub struct PlayerUpdateEvent {
+    pub new_position: Vec3,
+}
+
+impl PlayerUpdateEvent {
+    pub fn new(new_position: Vec3) -> Self {
+        Self { new_position }
+    }
+}
 
 fn spawn_player(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     terrain_query: Query<(&Transform, &Terrain), With<Terrain>>,
+    mut event_writer: EventWriter<PlayerUpdateEvent>,
 ) {
     let Ok((terrain_transform, terrain)) = terrain_query.get_single() else {
         return;
@@ -80,13 +90,17 @@ fn spawn_player(
             ..terrain_transform.translation.z + terrain_depth / 2.0,
     );
 
+    let player_position = Vec3::new(player_x, player_y, player_z);
+
+    event_writer.send(PlayerUpdateEvent::new(player_position));
+
     // Player cube
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(Cuboid::default()),
             material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
             transform: Transform {
-                translation: Vec3::new(player_x, player_y, player_z),
+                translation: player_position,
                 scale: Vec3::splat(PLAYER_SIZE),
                 ..default()
             },
@@ -96,6 +110,30 @@ fn spawn_player(
     ));
 }
 
+fn broadcast_player_update(
+    mut event_reader: EventReader<PlayerUpdateEvent>,
+    mut socket: ResMut<GameSocket>,
+) {
+    for &PlayerUpdateEvent { new_position } in event_reader.read() {
+        let player_uuid = socket.player.uuid.clone();
+
+        // Update player in socket
+        socket.update_player_position(player_uuid.clone(), new_position);
+
+        // Broadcast player_update
+        if let Some(status) = &socket.status {
+            if *status == SocketStatus::Connected {
+                let request =
+                    Request::new_player_update(GAME_ROOM.into(), player_uuid.clone(), new_position);
+                socket
+                    .handle
+                    .call(request)
+                    .expect("player_update request error");
+            }
+        }
+    }
+}
+
 const MOVEMENT_X_SPEED: f32 = 0.085;
 const MOVEMENT_Z_SPEED: f32 = 0.125;
 
@@ -103,7 +141,7 @@ fn update_player_position(
     mut player_query: Query<&mut Transform, (With<Player>, Without<SceneCamera>)>,
     camera_query: Query<&Transform, (With<SceneCamera>, Without<Player>)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    socket: ResMut<GameSocket>,
+    mut event_writer: EventWriter<PlayerUpdateEvent>,
 ) {
     let Ok(camera_transform) = camera_query.get_single() else {
         return;
@@ -112,7 +150,7 @@ fn update_player_position(
     let forward = Vec3::from(camera_transform.forward());
     let right = Vec3::from(camera_transform.right());
 
-    for mut player_transform in player_query.iter_mut() {
+    for mut player_position in player_query.iter_mut() {
         let mut direction = Vec3::ZERO;
         let mut did_transform = false;
 
@@ -134,22 +172,15 @@ fn update_player_position(
         }
 
         if direction != Vec3::ZERO {
-            // direction = direction.normalize();
-            player_transform.translation = Vec3::new(
-                player_transform.translation.x + direction.x,
-                player_transform.translation.y,
-                player_transform.translation.z + direction.z,
+            player_position.translation = Vec3::new(
+                player_position.translation.x + direction.x,
+                player_position.translation.y,
+                player_position.translation.z + direction.z,
             );
         }
 
         if did_transform {
-            if let Some(status) = &socket.status {
-                if *status == SocketStatus::Connected {
-                    let request =
-                        Request::new_shout_location(GAME_ROOM.into(), player_transform.translation);
-                    socket.handle.call(request).expect("shout request error");
-                }
-            }
+            event_writer.send(PlayerUpdateEvent::new(player_position.translation));
         }
     }
 }

@@ -1,10 +1,10 @@
-use super::{message::Message as SocketMessage, refs::Refs, user::User};
+use super::{message::Message as SocketMessage, player::Player, refs::Refs};
 use bevy::prelude::*;
 use serde_json::{json, Value as SerdeValue};
 
 // This module contains the Request struct used to create requests to be sent to the server.
 
-const TOPIC_PREFIX: &str = "relay:";
+const TOPIC_PREFIX: &str = "game:";
 
 // TODO: maybe Request should be an enum, e.g. Heartbeat, Join, Leave, Shout
 #[derive(Clone, Debug)]
@@ -24,11 +24,11 @@ impl Request {
         }
     }
 
-    pub fn new_join(room: String, user: User) -> Self {
+    pub fn new_join(room: String, player: Player) -> Self {
         Self {
             topic: room_to_topic(room),
             event: "phx_join".to_string(),
-            payload: json!({ "user": user  }),
+            payload: json!({ "player": player  }),
         }
     }
 
@@ -50,12 +50,11 @@ impl Request {
         }
     }
 
-    pub fn new_shout_location(room: String, position: Vec3) -> Self {
-        let message = format!("{}, {}", position.x, position.z);
+    pub fn new_player_update(room: String, uuid: String, new_position: Vec3) -> Self {
         Self {
             topic: room_to_topic(room),
-            event: "shout".to_string(),
-            payload: json!({  "message": message, "position": position }),
+            event: "player_update".to_string(),
+            payload: json!({ "player_uuid": uuid, "position": new_position }),
         }
     }
 

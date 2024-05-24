@@ -4,14 +4,15 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug, Resource)]
-pub struct User {
+pub struct Player {
     pub uuid: String,
     pub username: String,
-    pub online_at: u64,
     pub position: Option<Vec3>,
+    pub joined_at: u64,
+    pub updated_at: u64,
 }
 
-impl User {
+impl Player {
     pub fn new(username: String) -> Self {
         Self {
             uuid: generate_uuid(),
