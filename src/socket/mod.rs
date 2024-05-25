@@ -21,7 +21,16 @@ use chrono::Utc;
 use tokio::sync::mpsc::Receiver;
 
 pub const GAME_ROOM: &str = "iso";
-pub const HEARTBEAT_INTERVAL: f32 = 15.0;
+pub const HEARTBEAT_INTERVAL_SECS: f32 = 15.0;
+
+#[derive(Clone, Debug)]
+pub struct Config;
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {}
+    }
+}
 
 #[derive(Component)]
 struct SocketInfo {
@@ -36,17 +45,8 @@ pub struct HeartbeatTimer {
 impl Default for HeartbeatTimer {
     fn default() -> Self {
         Self {
-            timer: Timer::from_seconds(HEARTBEAT_INTERVAL, TimerMode::Repeating),
+            timer: Timer::from_seconds(HEARTBEAT_INTERVAL_SECS, TimerMode::Repeating),
         }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Config;
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {}
     }
 }
 

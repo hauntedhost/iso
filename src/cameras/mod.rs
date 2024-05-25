@@ -5,19 +5,6 @@ use self::basic::BasicCameraPlugin;
 use self::viewport::ViewportCameraPlugin;
 use bevy::prelude::*;
 
-#[derive(Component, Debug)]
-pub struct SceneCamera;
-
-pub type BasicConfig = basic::Config;
-pub type ViewportConfig = viewport::Config;
-
-#[allow(dead_code)]
-#[derive(Clone, Debug)]
-pub enum Camera {
-    Basic(BasicConfig),
-    Viewport(ViewportConfig),
-}
-
 #[derive(Clone, Debug)]
 pub struct Config {
     pub camera: Camera,
@@ -29,6 +16,19 @@ impl Default for Config {
             camera: Camera::Basic(BasicConfig::default()),
         }
     }
+}
+
+#[derive(Component, Debug)]
+pub struct SceneCamera;
+
+pub type BasicConfig = basic::Config;
+pub type ViewportConfig = viewport::Config;
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub enum Camera {
+    Basic(BasicConfig),
+    Viewport(ViewportConfig),
 }
 
 #[derive(Clone, Debug)]

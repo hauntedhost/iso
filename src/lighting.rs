@@ -8,15 +8,6 @@ const SCENE_LIGHT_TARGET_POS: Vec3 = Vec3::new(-0.02, 0.02, 0.02);
 const SPOTLIGHT_POS: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 const MOVEMENT_SPEED: f32 = 0.01;
 
-#[derive(Component, Debug)]
-pub struct PlayerLight;
-
-#[derive(Component, Debug)]
-pub struct SceneLight;
-
-#[derive(Component, Debug)]
-pub struct SceneLightTarget;
-
 #[derive(Clone, Debug)]
 pub struct Config {
     pub scene_light_controls: bool,
@@ -29,6 +20,15 @@ impl Default for Config {
         }
     }
 }
+
+#[derive(Component, Debug)]
+pub struct PlayerLight;
+
+#[derive(Component, Debug)]
+pub struct SceneLight;
+
+#[derive(Component, Debug)]
+pub struct SceneLightTarget;
 
 #[derive(Clone, Debug)]
 pub struct LightingPlugin {

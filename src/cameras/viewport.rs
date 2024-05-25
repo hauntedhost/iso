@@ -1,6 +1,5 @@
-use crate::schedule::{PreStartupSet, UpdateSet};
-
 use super::SceneCamera;
+use crate::schedule::{PreStartupSet, UpdateSet};
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 

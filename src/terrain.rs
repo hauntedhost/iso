@@ -5,13 +5,6 @@ const TERRAIN_WIDTH: f32 = 5.0;
 const TERRAIN_HEIGHT: f32 = 0.3;
 const TERRAIN_DEPTH: f32 = 5.0;
 
-#[derive(Component, Debug)]
-pub struct Terrain {
-    pub width: f32,
-    pub height: f32,
-    pub depth: f32,
-}
-
 #[derive(Clone, Debug)]
 pub struct Config;
 
@@ -19,6 +12,13 @@ impl Default for Config {
     fn default() -> Self {
         Self {}
     }
+}
+
+#[derive(Component, Debug)]
+pub struct Terrain {
+    pub width: f32,
+    pub height: f32,
+    pub depth: f32,
 }
 
 #[derive(Clone, Debug)]

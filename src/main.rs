@@ -18,8 +18,6 @@ use player::PlayerPlugin;
 use socket::SocketPlugin;
 use terrain::TerrainPlugin;
 
-// TODO: debounce the socket player_update messages, it doesn't need to send a firehose
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {

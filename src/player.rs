@@ -6,8 +6,23 @@ use crate::socket::{GameSocket, GAME_ROOM};
 use crate::terrain::Terrain;
 use bevy::prelude::*;
 use rand::Rng;
+use std::time::Duration;
 
+const BROADCAST_THROTTLE_MS: u64 = 30;
 const PLAYER_SIZE: f32 = 0.2;
+
+// TODO: This is weird
+const MOVEMENT_X_SPEED: f32 = 0.085;
+const MOVEMENT_Z_SPEED: f32 = 0.125;
+
+#[derive(Clone, Debug)]
+pub struct Config;
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {}
+    }
+}
 
 #[derive(Component, Debug)]
 pub struct PlayerTag;
@@ -17,12 +32,21 @@ pub struct FriendTag {
     pub player_uuid: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct Config;
+#[derive(Resource, Debug)]
+struct BroadcastBuffer {
+    pub last_update: Option<Vec3>,
+    pub timer: Timer,
+}
 
-impl Default for Config {
+impl Default for BroadcastBuffer {
     fn default() -> Self {
-        Self {}
+        Self {
+            last_update: None,
+            timer: Timer::new(
+                Duration::from_millis(BROADCAST_THROTTLE_MS),
+                TimerMode::Repeating,
+            ),
+        }
     }
 }
 
@@ -41,7 +65,8 @@ impl Default for PlayerPlugin {
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_player.in_set(StartupSet::SpawnEntities))
+        app.insert_resource(BroadcastBuffer::default())
+            .add_systems(Startup, spawn_player.in_set(StartupSet::SpawnEntities))
             .add_systems(
                 Update,
                 (update_player_position, broadcast_player_update)
@@ -136,31 +161,41 @@ fn spawn_player(
 }
 
 fn broadcast_player_update(
+    time: Res<Time>,
+    mut broadcast_buffer: ResMut<BroadcastBuffer>,
     mut event_reader: EventReader<PlayerUpdateEvent>,
     mut socket: ResMut<GameSocket>,
 ) {
+    broadcast_buffer.timer.tick(time.delta());
+
+    let player_uuid = socket.player_uuid.clone();
     for &PlayerUpdateEvent { new_position } in event_reader.read() {
-        let player_uuid = socket.player_uuid.clone();
+        // Replace last_update in buffer
+        broadcast_buffer.last_update = Some(new_position);
 
         // Update player in socket
         socket.update_player_position(player_uuid.clone(), new_position);
+    }
 
-        // Broadcast player_update
-        if let Some(status) = &socket.status {
-            if *status == SocketStatus::Connected {
-                let request =
-                    Request::new_player_update(GAME_ROOM.into(), player_uuid.clone(), new_position);
-                socket
-                    .handle
-                    .call(request)
-                    .expect("player_update request error");
+    if broadcast_buffer.timer.finished() {
+        if let Some(new_position) = broadcast_buffer.last_update.take() {
+            if let Some(status) = &socket.status {
+                if *status == SocketStatus::Connected {
+                    let request = Request::new_player_update(
+                        GAME_ROOM.into(),
+                        player_uuid.clone(),
+                        new_position,
+                    );
+                    socket
+                        .handle
+                        .call(request)
+                        .expect("player_update request error");
+                }
             }
         }
+        broadcast_buffer.timer.reset();
     }
 }
-
-const MOVEMENT_X_SPEED: f32 = 0.085;
-const MOVEMENT_Z_SPEED: f32 = 0.125;
 
 fn update_player_position(
     mut player_query: Query<
@@ -282,13 +317,13 @@ fn update_friend_positions(
     }
 }
 
+// Despawn friend entities that cannot be found in socket.friends
 fn despawn_friends(
     mut commands: Commands,
     friend_query: Query<(Entity, &FriendTag), With<FriendTag>>,
     socket: Res<GameSocket>,
 ) {
     for (entity, friend_tag) in friend_query.iter() {
-        // Despawn friend entities that cannot be found in socket.friends
         if socket.get_friend(&friend_tag.player_uuid).is_none() {
             commands.entity(entity).despawn_recursive();
         };
