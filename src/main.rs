@@ -1,4 +1,5 @@
 mod cameras;
+mod collision;
 mod debug;
 mod helpers;
 mod lighting;
@@ -9,12 +10,15 @@ mod terrain;
 
 use bevy::prelude::*;
 use cameras::CameraPlugin;
+use collision::CollisionPlugin;
 use debug::DebugPlugin;
 use helpers::names::get_from_env_or_generate_window_title;
 use lighting::LightingPlugin;
 use player::PlayerPlugin;
 use socket::SocketPlugin;
 use terrain::TerrainPlugin;
+
+// TODO: debounce the socket player_update messages, it doesn't need to send a firehose
 
 fn main() {
     App::new()
@@ -31,5 +35,6 @@ fn main() {
         .add_plugins(CameraPlugin::default())
         .add_plugins(TerrainPlugin::default())
         .add_plugins(PlayerPlugin::default())
+        .add_plugins(CollisionPlugin::default())
         .run();
 }

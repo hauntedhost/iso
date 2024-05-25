@@ -163,7 +163,10 @@ const MOVEMENT_X_SPEED: f32 = 0.085;
 const MOVEMENT_Z_SPEED: f32 = 0.125;
 
 fn update_player_position(
-    mut player_query: Query<&mut Transform, (With<PlayerTag>, Without<SceneCamera>)>,
+    mut player_query: Query<
+        &mut Transform,
+        (With<PlayerTag>, Without<FriendTag>, Without<SceneCamera>),
+    >,
     camera_query: Query<&Transform, (With<SceneCamera>, Without<PlayerTag>)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut event_writer: EventWriter<PlayerUpdateEvent>,
@@ -247,6 +250,7 @@ fn spawn_friends(
                 },
                 ..default()
             },
+            PlayerTag,
             FriendTag {
                 player_uuid: player_uuid.clone(),
             },
