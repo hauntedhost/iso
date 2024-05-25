@@ -1,7 +1,6 @@
 pub mod client;
 pub mod connection;
 pub mod message;
-pub mod names;
 pub mod player;
 pub mod refs;
 pub mod request;
@@ -139,8 +138,20 @@ fn update_socket_info(
         return;
     };
 
-    let friends: Vec<String> = socket
-        .friends
+    let socket_status = match &socket.status {
+        Some(s) => format!("{:?}", s),
+        None => "None".to_string(),
+    };
+
+    let player = socket.get_player();
+
+    let player_position = match player.position {
+        Some(pos) => format!("({:.2}, {:.2})", pos.x, pos.z),
+        None => "()".to_string(),
+    };
+
+    let friends_info: Vec<String> = socket
+        .get_friends()
         .iter()
         .map(|(_uuid, player)| {
             let position = match player.position {
@@ -151,19 +162,9 @@ fn update_socket_info(
         })
         .collect();
 
-    let status = match &socket.status {
-        Some(s) => format!("{:?}", s),
-        None => "None".to_string(),
-    };
-
-    let position = match socket.player.position {
-        Some(pos) => format!("({:.2}, {:.2})", pos.x, pos.z),
-        None => "()".to_string(),
-    };
-
     let info_text = format!(
-        "{status} @{} {} friends={:?}",
-        socket.player.username, position, friends
+        "{socket_status} @{} {} friends={:?}",
+        player.username, player_position, friends_info
     );
 
     let mut text_section = socket_info.text_section.clone();
@@ -173,8 +174,8 @@ fn update_socket_info(
 
 #[derive(Debug, Resource)]
 pub struct GameSocket {
-    pub player: Player,
-    pub friends: HashMap<String, Player>,
+    pub player_uuid: String,
+    pub players: HashMap<String, Player>,
     pub status: Option<SocketStatus>,
     pub last_response: Option<Response>,
     pub handle: ezsockets::Client<Client>,
@@ -203,36 +204,57 @@ impl GameSocket {
             future.await.unwrap();
         });
 
+        let player = Player::new_from_env_or_generate();
+        let mut players = HashMap::new();
+        players.insert(player.uuid.clone(), player.clone());
+
         Self {
             handle,
             rx,
             status: None,
             last_response: None,
-            player: Player::new_from_env_or_generate(),
-            friends: HashMap::new(),
+            player_uuid: player.uuid,
+            players,
             _runtime: runtime,
         }
     }
 
-    pub fn remove_friend(&mut self, friend: Player) {
-        self.friends.remove(&friend.uuid);
+    pub fn get_player(&self) -> &Player {
+        self.players.get(&self.player_uuid).unwrap()
+    }
+
+    pub fn get_friend(&self, player_uuid: &String) -> Option<Player> {
+        match self.get_friends().get(player_uuid) {
+            Some(friend) => Some(friend.clone()),
+            None => None,
+        }
+    }
+
+    pub fn get_friends(&self) -> HashMap<String, Player> {
+        let mut friends = self.players.clone();
+        friends.remove(&self.player_uuid);
+        friends
+    }
+
+    pub fn is_player_self(&self, player_uuid: &String) -> bool {
+        &self.player_uuid == player_uuid
+    }
+
+    pub fn remove_friend(&mut self, player: Player) {
+        if !self.is_player_self(&player.uuid) {
+            self.players.remove(&player.uuid);
+        }
     }
 
     pub fn upsert_player(&mut self, player: Player) {
-        if player.uuid == self.player.uuid {
-            if player.position.is_some() {
-                self.player.position = player.position;
-            }
-        } else {
-            self.friends
-                .entry(player.uuid.clone())
-                .and_modify(|existing_friend| {
-                    if player.position.is_some() {
-                        existing_friend.position = player.position;
-                    }
-                })
-                .or_insert_with(|| player.clone());
-        }
+        self.players
+            .entry(player.uuid.clone())
+            .and_modify(|existing_player| {
+                if player.position.is_some() {
+                    existing_player.position = player.position;
+                }
+            })
+            .or_insert_with(|| player.clone());
     }
 
     pub fn upsert_players(&mut self, players: Vec<Player>) {
@@ -241,16 +263,14 @@ impl GameSocket {
         }
     }
 
-    pub fn update_player_position(&mut self, uuid: String, position: Vec3) {
-        if uuid == self.player.uuid {
-            self.player.position = Some(position);
-        } else if let Some(friend) = self.friends.get_mut(&uuid) {
-            friend.position = Some(position);
+    pub fn update_player_position(&mut self, player_uuid: String, position: Vec3) {
+        if let Some(player) = self.players.get_mut(&player_uuid) {
+            player.position = Some(position);
         }
     }
 
     pub fn has_spawned(&mut self, player_uuid: &String) -> bool {
-        if let Some(player) = self.friends.get(player_uuid) {
+        if let Some(player) = self.players.get(player_uuid) {
             player.spawned_at.is_some()
         } else {
             false
@@ -258,7 +278,7 @@ impl GameSocket {
     }
 
     pub fn set_spawned_at(&mut self, player_uuid: &String) {
-        if let Some(player) = self.friends.get_mut(player_uuid) {
+        if let Some(player) = self.players.get_mut(player_uuid) {
             let now = Utc::now();
             let timestamp = now.timestamp() as u64;
             player.spawned_at = Some(timestamp);
@@ -275,7 +295,7 @@ fn handle_socket_events(
             SocketEvent::Close => socket.status = Some(SocketStatus::Closed),
             SocketEvent::Connect => {
                 socket.status = Some(SocketStatus::Connected);
-                let request = Request::new_join(GAME_ROOM.into(), socket.player.clone());
+                let request = Request::new_join(GAME_ROOM.into(), socket.get_player().clone());
                 socket.handle.call(request).expect("join error");
             }
             SocketEvent::ConnectFail => socket.status = Some(SocketStatus::ConnectFailed),

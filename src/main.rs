@@ -1,5 +1,6 @@
 mod cameras;
 mod debug;
+mod helpers;
 mod lighting;
 mod player;
 mod schedule;
@@ -9,6 +10,7 @@ mod terrain;
 use bevy::prelude::*;
 use cameras::CameraPlugin;
 use debug::DebugPlugin;
+use helpers::names::get_from_env_or_generate_window_title;
 use lighting::LightingPlugin;
 use player::PlayerPlugin;
 use socket::SocketPlugin;
@@ -16,7 +18,13 @@ use terrain::TerrainPlugin;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: get_from_env_or_generate_window_title(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }))
         .add_plugins(DebugPlugin::default())
         .add_plugins(SocketPlugin::default())
         .add_plugins(LightingPlugin::default())

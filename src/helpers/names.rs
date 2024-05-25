@@ -1,10 +1,20 @@
 use nid::{alphabet::Base62Alphabet, Nanoid};
 use rand::Rng;
 use regex::Regex;
+use std::env;
 
 pub fn generate_uuid() -> String {
     let nid: Nanoid<8, Base62Alphabet> = Nanoid::new();
     nid.to_string()
+}
+
+pub fn get_from_env_or_generate_window_title() -> String {
+    if let Ok(title) = env::var("TITLE") {
+        title
+    } else {
+        let uuid = generate_uuid();
+        format!("iso-{uuid}")
+    }
 }
 
 pub fn generate_valid_username() -> String {

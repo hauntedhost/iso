@@ -1,4 +1,4 @@
-use super::names::{generate_uuid, generate_valid_username};
+use crate::helpers::names::{generate_uuid, generate_valid_username};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::env;

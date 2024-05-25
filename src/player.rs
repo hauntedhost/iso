@@ -140,7 +140,7 @@ fn broadcast_player_update(
     mut socket: ResMut<GameSocket>,
 ) {
     for &PlayerUpdateEvent { new_position } in event_reader.read() {
-        let player_uuid = socket.player.uuid.clone();
+        let player_uuid = socket.player_uuid.clone();
 
         // Update player in socket
         socket.update_player_position(player_uuid.clone(), new_position);
@@ -224,7 +224,7 @@ fn spawn_friends(
     } in update_event_reader.read()
     {
         // Skip if player is self
-        if player_uuid.clone() == socket.player.uuid {
+        if player_uuid.clone() == socket.player_uuid {
             continue;
         }
 
@@ -260,7 +260,7 @@ fn update_friend_positions(
 ) {
     for (mut current_position, friend_tag) in friend_query.iter_mut() {
         // Skip unless player can be found in friends
-        let Some(player) = socket.friends.get(&friend_tag.player_uuid) else {
+        let Some(player) = socket.get_friend(&friend_tag.player_uuid) else {
             continue;
         };
 
@@ -285,7 +285,7 @@ fn despawn_friends(
 ) {
     for (entity, friend_tag) in friend_query.iter() {
         // Despawn friend entities that cannot be found in socket.friends
-        if socket.friends.get(&friend_tag.player_uuid).is_none() {
+        if socket.get_friend(&friend_tag.player_uuid).is_none() {
             commands.entity(entity).despawn_recursive();
         };
     }

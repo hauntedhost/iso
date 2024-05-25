@@ -1,4 +1,4 @@
-use super::names::generate_uuid;
+use crate::helpers::names::generate_uuid;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]

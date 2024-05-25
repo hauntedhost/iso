@@ -1,5 +1,6 @@
 pub mod basic;
 pub mod viewport;
+
 use self::basic::BasicCameraPlugin;
 use self::viewport::ViewportCameraPlugin;
 use bevy::prelude::*;
