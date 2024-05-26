@@ -1,6 +1,6 @@
 mod cameras;
 mod collision;
-mod debug;
+mod dev_tools;
 mod helpers;
 mod lighting;
 mod player;
@@ -9,11 +9,10 @@ mod socket;
 mod terrain;
 
 use bevy::prelude::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use cameras::CameraPlugin;
 use collision::CollisionPlugin;
-use debug::DebugPlugin;
-use helpers::names::get_from_env_or_generate_window_title;
+use dev_tools::DevToolsPlugin;
+use helpers::names::get_title_from_env_or_generate;
 use lighting::LightingPlugin;
 use player::PlayerPlugin;
 use socket::SocketPlugin;
@@ -23,13 +22,13 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: get_from_env_or_generate_window_title(),
+                title: get_title_from_env_or_generate(),
                 ..Default::default()
             }),
             ..Default::default()
         }))
-        .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins(DebugPlugin::default())
+        .add_plugins(DevToolsPlugin::default())
+        // TODO: GameStatePlugin for player_uuid and players
         .add_plugins(SocketPlugin::default())
         .add_plugins(LightingPlugin::default())
         .add_plugins(CameraPlugin::default())

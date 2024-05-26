@@ -37,7 +37,8 @@ struct SocketInfo {
     text_section: TextSection,
 }
 
-#[derive(Resource, Debug)]
+#[derive(Resource, Debug, Reflect)]
+#[reflect(Resource)]
 pub struct HeartbeatTimer {
     timer: Timer,
 }
@@ -67,6 +68,7 @@ impl Plugin for SocketPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GameSocket::new())
             .insert_resource(HeartbeatTimer::default())
+            .register_type::<HeartbeatTimer>()
             .add_systems(Startup, spawn_socket_info)
             .add_systems(
                 Update,
@@ -208,7 +210,7 @@ impl GameSocket {
             future.await.unwrap();
         });
 
-        let player = Player::new_from_env_or_generate();
+        let player = Player::new_with_username_from_env_or_generate();
         let mut players = HashMap::new();
         players.insert(player.uuid.clone(), player.clone());
 

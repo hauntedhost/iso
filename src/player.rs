@@ -32,7 +32,8 @@ pub struct FriendTag {
     pub player_uuid: String,
 }
 
-#[derive(Resource, Debug)]
+#[derive(Resource, Debug, Reflect)]
+#[reflect(Resource)]
 struct BroadcastBuffer {
     pub last_update: Option<Vec3>,
     pub timer: Timer,
@@ -66,6 +67,7 @@ impl Default for PlayerPlugin {
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(BroadcastBuffer::default())
+            .register_type::<BroadcastBuffer>()
             .add_systems(Startup, spawn_player.in_set(StartupSet::SpawnEntities))
             .add_systems(
                 Update,

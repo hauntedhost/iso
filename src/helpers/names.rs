@@ -8,7 +8,7 @@ pub fn generate_uuid() -> String {
     nid.to_string()
 }
 
-pub fn get_from_env_or_generate_window_title() -> String {
+pub fn get_title_from_env_or_generate() -> String {
     if let Ok(title) = env::var("TITLE") {
         title
     } else {

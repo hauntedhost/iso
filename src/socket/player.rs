@@ -9,6 +9,7 @@ pub struct Player {
     pub username: String,
     pub position: Option<Vec3>,
     pub spawned_at: Option<u64>,
+    // TODO: Make a clearer distinction between server vs client joined_at/updated_at
     pub joined_at: u64,
     pub updated_at: u64,
 }
@@ -23,7 +24,7 @@ impl Player {
     }
 
     // Create a new user from NAME env var otherwise generate a guest username
-    pub fn new_from_env_or_generate() -> Self {
+    pub fn new_with_username_from_env_or_generate() -> Self {
         match env::var("NAME") {
             Ok(username) => Self::new(username),
             Err(_) => Self::new(generate_valid_username()),

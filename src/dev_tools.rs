@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use iyes_perf_ui::diagnostics::{PerfUiEntryEntityCount, PerfUiEntryFPS};
 use iyes_perf_ui::{PerfUiPlugin, PerfUiRoot};
 
@@ -13,12 +14,16 @@ impl Default for Config {
     }
 }
 
+#[derive(Resource, Default, Reflect)]
+#[reflect(Resource)]
+struct DevSettings {}
+
 #[derive(Clone, Debug)]
-pub struct DebugPlugin {
+pub struct DevToolsPlugin {
     pub config: Config,
 }
 
-impl Default for DebugPlugin {
+impl Default for DevToolsPlugin {
     fn default() -> Self {
         Self {
             config: Config::default(),
@@ -26,10 +31,13 @@ impl Default for DebugPlugin {
     }
 }
 
-impl Plugin for DebugPlugin {
+impl Plugin for DevToolsPlugin {
     fn build(&self, app: &mut App) {
         if self.config.enabled {
-            app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+            app.insert_resource(DevSettings::default())
+                .register_type::<DevSettings>()
+                .add_plugins(WorldInspectorPlugin::new())
+                .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
                 .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
                 .add_plugins(PerfUiPlugin)
                 .add_systems(Startup, add_perf);
