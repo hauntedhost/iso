@@ -27,8 +27,7 @@ fn main() {
             }),
             ..Default::default()
         }))
-        .add_plugins(DevToolsPlugin::default())
-        // TODO: GameStatePlugin for player_uuid and players
+        .add_plugins(DevToolsPlugin { enabled: true })
         .add_plugins(SocketPlugin::default())
         .add_plugins(LightingPlugin::default())
         .add_plugins(CameraPlugin::default())

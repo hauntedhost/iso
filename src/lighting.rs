@@ -1,5 +1,5 @@
 use crate::cameras::SceneCamera;
-use crate::player::{FriendTag, PlayerTag};
+use crate::player::systems::{FriendTag, PlayerTag};
 use crate::schedule::{PreStartupSet, UpdateSet};
 use bevy::prelude::*;
 
@@ -7,19 +7,6 @@ const SCENE_LIGHT_POS: Vec3 = Vec3::new(-2.0, 1.4, 0.5);
 const SCENE_LIGHT_TARGET_POS: Vec3 = Vec3::new(-0.02, 0.02, 0.02);
 const SPOTLIGHT_POS: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 const MOVEMENT_SPEED: f32 = 0.01;
-
-#[derive(Clone, Debug)]
-pub struct Config {
-    pub scene_light_controls: bool,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            scene_light_controls: false,
-        }
-    }
-}
 
 #[derive(Component, Debug)]
 pub struct PlayerLight;
@@ -32,13 +19,13 @@ pub struct SceneLightTarget;
 
 #[derive(Clone, Debug)]
 pub struct LightingPlugin {
-    pub config: Config,
+    pub scene_light_controls: bool,
 }
 
 impl Default for LightingPlugin {
     fn default() -> Self {
         Self {
-            config: Config::default(),
+            scene_light_controls: false,
         }
     }
 }
@@ -51,7 +38,7 @@ impl Plugin for LightingPlugin {
                 follow_player_with_spotlight.in_set(UpdateSet::AfterEffects),
             );
 
-        if self.config.scene_light_controls {
+        if self.scene_light_controls {
             app.add_systems(
                 PreStartup,
                 spawn_scene_light_target.in_set(PreStartupSet::SpawnWorld),

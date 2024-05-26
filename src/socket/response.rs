@@ -1,4 +1,5 @@
-use super::{message::Message, player::Player, room::Room};
+use super::message::Message;
+use crate::player::player::Player;
 use bevy::math::Vec3;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -109,6 +110,12 @@ pub struct PresenceDiff {
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct PresenceState {
     pub players: Vec<Player>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
+pub struct Room {
+    pub name: String,
+    pub player_count: u32,
 }
 
 pub type RoomsUpdate = Vec<Room>;

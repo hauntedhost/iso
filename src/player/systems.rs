@@ -1,28 +1,19 @@
+use super::store::PlayerStore;
 use crate::cameras::SceneCamera;
-use crate::schedule::{StartupSet, UpdateSet};
 use crate::socket::client::SocketStatus;
 use crate::socket::request::Request;
-use crate::socket::{GameSocket, GAME_ROOM};
+use crate::socket::{Socket, GAME_ROOM};
 use crate::terrain::Terrain;
 use bevy::prelude::*;
 use rand::Rng;
 use std::time::Duration;
 
+pub const PLAYER_SIZE: f32 = 0.2;
 const BROADCAST_THROTTLE_MS: u64 = 30;
-const PLAYER_SIZE: f32 = 0.2;
 
 // TODO: This is weird
 const MOVEMENT_X_SPEED: f32 = 0.085;
 const MOVEMENT_Z_SPEED: f32 = 0.125;
-
-#[derive(Clone, Debug)]
-pub struct Config;
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 #[derive(Component, Debug)]
 pub struct PlayerTag;
@@ -32,9 +23,20 @@ pub struct FriendTag {
     pub player_uuid: String,
 }
 
+#[derive(Event, Debug)]
+pub struct PlayerUpdateEvent {
+    pub new_position: Vec3,
+}
+
+impl PlayerUpdateEvent {
+    pub fn new(new_position: Vec3) -> Self {
+        Self { new_position }
+    }
+}
+
 #[derive(Resource, Debug, Reflect)]
 #[reflect(Resource)]
-struct BroadcastBuffer {
+pub struct BroadcastBuffer {
     pub last_update: Option<Vec3>,
     pub timer: Timer,
 }
@@ -48,50 +50,6 @@ impl Default for BroadcastBuffer {
                 TimerMode::Repeating,
             ),
         }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct PlayerPlugin {
-    pub config: Config,
-}
-
-impl Default for PlayerPlugin {
-    fn default() -> Self {
-        Self {
-            config: Config::default(),
-        }
-    }
-}
-
-impl Plugin for PlayerPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(BroadcastBuffer::default())
-            .register_type::<BroadcastBuffer>()
-            .add_systems(Startup, spawn_player.in_set(StartupSet::SpawnEntities))
-            .add_systems(
-                Update,
-                (update_player_position, broadcast_player_update)
-                    .chain()
-                    .in_set(UpdateSet::UserInputEffects),
-            )
-            .add_systems(
-                Update,
-                (spawn_friends, despawn_friends, update_friend_positions),
-            )
-            .add_event::<PlayerUpdateEvent>()
-            .add_event::<FriendUpdateEvent>();
-    }
-}
-
-#[derive(Event, Debug)]
-pub struct PlayerUpdateEvent {
-    pub new_position: Vec3,
-}
-
-impl PlayerUpdateEvent {
-    pub fn new(new_position: Vec3) -> Self {
-        Self { new_position }
     }
 }
 
@@ -110,7 +68,7 @@ impl FriendUpdateEvent {
     }
 }
 
-fn spawn_player(
+pub fn spawn_player(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -163,44 +121,7 @@ fn spawn_player(
     ));
 }
 
-fn broadcast_player_update(
-    time: Res<Time>,
-    mut broadcast_buffer: ResMut<BroadcastBuffer>,
-    mut event_reader: EventReader<PlayerUpdateEvent>,
-    mut socket: ResMut<GameSocket>,
-) {
-    broadcast_buffer.timer.tick(time.delta());
-
-    let player_uuid = socket.player_uuid.clone();
-    for &PlayerUpdateEvent { new_position } in event_reader.read() {
-        // Replace last_update in buffer
-        broadcast_buffer.last_update = Some(new_position);
-
-        // Update player in socket
-        socket.update_player_position(player_uuid.clone(), new_position);
-    }
-
-    if broadcast_buffer.timer.finished() {
-        if let Some(new_position) = broadcast_buffer.last_update.take() {
-            if let Some(status) = &socket.status {
-                if *status == SocketStatus::Connected {
-                    let request = Request::new_player_update(
-                        GAME_ROOM.into(),
-                        player_uuid.clone(),
-                        new_position,
-                    );
-                    socket
-                        .handle
-                        .call(request)
-                        .expect("player_update request error");
-                }
-            }
-        }
-        broadcast_buffer.timer.reset();
-    }
-}
-
-fn update_player_position(
+pub fn update_player_position(
     mut player_query: Query<
         &mut Transform,
         (With<PlayerTag>, Without<FriendTag>, Without<SceneCamera>),
@@ -252,12 +173,50 @@ fn update_player_position(
     }
 }
 
-fn spawn_friends(
+pub fn broadcast_player_update(
+    mut event_reader: EventReader<PlayerUpdateEvent>,
+    mut store: ResMut<PlayerStore>,
+    mut broadcast_buffer: ResMut<BroadcastBuffer>,
+    socket: Res<Socket>,
+    time: Res<Time>,
+) {
+    broadcast_buffer.timer.tick(time.delta());
+
+    let player_uuid = store.player_uuid.clone();
+    for &PlayerUpdateEvent { new_position } in event_reader.read() {
+        // Replace last_update in buffer
+        broadcast_buffer.last_update = Some(new_position);
+
+        // Update player in socket
+        store.update_player_position(player_uuid.clone(), new_position);
+    }
+
+    if broadcast_buffer.timer.finished() {
+        if let Some(new_position) = broadcast_buffer.last_update.take() {
+            if let Some(status) = &socket.status {
+                if *status == SocketStatus::Connected {
+                    let request = Request::new_player_update(
+                        GAME_ROOM.into(),
+                        player_uuid.clone(),
+                        new_position,
+                    );
+                    socket
+                        .handle
+                        .call(request)
+                        .expect("player_update request error");
+                }
+            }
+        }
+        broadcast_buffer.timer.reset();
+    }
+}
+
+pub fn spawn_friends(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut update_event_reader: EventReader<FriendUpdateEvent>,
-    mut socket: ResMut<GameSocket>,
+    mut store: ResMut<PlayerStore>,
 ) {
     for FriendUpdateEvent {
         player_uuid,
@@ -265,17 +224,17 @@ fn spawn_friends(
     } in update_event_reader.read()
     {
         // Skip if player is self
-        if player_uuid.clone() == socket.player_uuid {
+        if player_uuid.clone() == store.player_uuid {
             continue;
         }
 
         // Skip if player already spawned
-        if socket.has_spawned(player_uuid) {
+        if store.has_spawned(player_uuid) {
             continue;
         }
 
         // Spawn new player
-        socket.set_spawned_at(player_uuid);
+        store.set_spawned_at(player_uuid);
 
         commands.spawn((
             PbrBundle {
@@ -297,13 +256,13 @@ fn spawn_friends(
     }
 }
 
-fn update_friend_positions(
+pub fn update_friend_positions(
     mut friend_query: Query<(&mut Transform, &FriendTag), With<FriendTag>>,
-    socket: Res<GameSocket>,
+    store: Res<PlayerStore>,
 ) {
     for (mut current_position, friend_tag) in friend_query.iter_mut() {
         // Skip unless player can be found in friends
-        let Some(player) = socket.get_friend(&friend_tag.player_uuid) else {
+        let Some(player) = store.get_friend(&friend_tag.player_uuid) else {
             continue;
         };
 
@@ -322,13 +281,13 @@ fn update_friend_positions(
 }
 
 // Despawn friend entities that cannot be found in socket.friends
-fn despawn_friends(
+pub fn despawn_friends(
     mut commands: Commands,
     friend_query: Query<(Entity, &FriendTag), With<FriendTag>>,
-    socket: Res<GameSocket>,
+    store: Res<PlayerStore>,
 ) {
     for (entity, friend_tag) in friend_query.iter() {
-        if socket.get_friend(&friend_tag.player_uuid).is_none() {
+        if store.get_friend(&friend_tag.player_uuid).is_none() {
             commands.entity(entity).despawn_recursive();
         };
     }

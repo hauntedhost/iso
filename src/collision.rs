@@ -1,31 +1,21 @@
-use crate::player::PlayerTag;
+use crate::{player::systems::PlayerTag, schedule::UpdateSet};
 use bevy::{prelude::*, utils::HashSet};
 
 #[derive(Clone, Debug)]
-pub struct Config;
+pub struct CollisionPlugin {}
 
-impl Default for Config {
+impl Default for CollisionPlugin {
     fn default() -> Self {
         Self {}
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct CollisionPlugin {
-    pub config: Config,
-}
-
-impl Default for CollisionPlugin {
-    fn default() -> Self {
-        Self {
-            config: Config::default(),
-        }
-    }
-}
-
 impl Plugin for CollisionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, collision_detection::<PlayerTag>);
+        app.add_systems(
+            Update,
+            collision_detection::<PlayerTag>.in_set(UpdateSet::AfterEffects),
+        );
     }
 }
 

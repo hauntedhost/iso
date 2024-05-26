@@ -3,7 +3,8 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::env;
 
-#[derive(Default, Clone, Serialize, Deserialize, Debug, Resource)]
+#[derive(Default, Clone, Serialize, Deserialize, Debug, Resource, Reflect)]
+#[reflect(Resource)]
 pub struct Player {
     pub uuid: String,
     pub username: String,
@@ -23,7 +24,7 @@ impl Player {
         }
     }
 
-    // Create a new user from NAME env var otherwise generate a guest username
+    // Create a new player from NAME env var, otherwise generate a username
     pub fn new_with_username_from_env_or_generate() -> Self {
         match env::var("NAME") {
             Ok(username) => Self::new(username),

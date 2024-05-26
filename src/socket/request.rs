@@ -1,4 +1,5 @@
-use super::{message::Message as SocketMessage, player::Player, refs::Refs};
+use super::{message::Message as SocketMessage, refs::Refs};
+use crate::player::player::Player;
 use bevy::prelude::*;
 use serde_json::{json, Value as SerdeValue};
 

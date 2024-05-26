@@ -3,37 +3,24 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use iyes_perf_ui::diagnostics::{PerfUiEntryEntityCount, PerfUiEntryFPS};
 use iyes_perf_ui::{PerfUiPlugin, PerfUiRoot};
 
-#[derive(Clone, Debug)]
-pub struct Config {
-    enabled: bool,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self { enabled: true }
-    }
-}
-
 #[derive(Resource, Default, Reflect)]
 #[reflect(Resource)]
 struct DevSettings {}
 
 #[derive(Clone, Debug)]
 pub struct DevToolsPlugin {
-    pub config: Config,
+    pub enabled: bool,
 }
 
 impl Default for DevToolsPlugin {
     fn default() -> Self {
-        Self {
-            config: Config::default(),
-        }
+        Self { enabled: true }
     }
 }
 
 impl Plugin for DevToolsPlugin {
     fn build(&self, app: &mut App) {
-        if self.config.enabled {
+        if self.enabled {
             app.insert_resource(DevSettings::default())
                 .register_type::<DevSettings>()
                 .add_plugins(WorldInspectorPlugin::new())
