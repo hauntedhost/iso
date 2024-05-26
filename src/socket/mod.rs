@@ -103,18 +103,21 @@ fn spawn_socket_info(mut commands: Commands, asset_server: Res<AssetServer>) {
     );
 
     commands
-        .spawn(NodeBundle {
-            style: Style {
-                width: Val::Vw(100.),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                position_type: PositionType::Absolute,
-                bottom: Val::Px(0.0),
-                padding: UiRect::all(Val::Px(10.0)),
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Vw(100.),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    position_type: PositionType::Absolute,
+                    bottom: Val::Px(0.0),
+                    padding: UiRect::all(Val::Px(10.0)),
+                    ..default()
+                },
                 ..default()
             },
-            ..default()
-        })
+            Name::new("SocketInfo"),
+        ))
         .with_children(|parent| {
             parent.spawn((
                 TextBundle {
@@ -126,6 +129,7 @@ fn spawn_socket_info(mut commands: Commands, asset_server: Res<AssetServer>) {
                     ..default()
                 },
                 SocketInfo { text_section },
+                Name::new("SocketInfoText"),
             ));
         });
 }

@@ -62,5 +62,6 @@ fn spawn_terrain(
             height: TERRAIN_HEIGHT,
             depth: TERRAIN_DEPTH,
         },
+        Name::new("Terrain"),
     ));
 }

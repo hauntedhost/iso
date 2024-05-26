@@ -78,6 +78,7 @@ fn spawn_lights(mut commands: Commands) {
             ..default()
         },
         SceneLight,
+        Name::new("SceneLight"),
     ));
 
     // Player tracking spotlight
@@ -93,6 +94,7 @@ fn spawn_lights(mut commands: Commands) {
             ..default()
         },
         PlayerLight,
+        Name::new("PlayerLight"),
     ));
 }
 
@@ -139,6 +141,7 @@ fn spawn_scene_light_target(
             ..default()
         },
         SceneLightTarget,
+        Name::new("SceneLightTarget"),
     ));
 }
 

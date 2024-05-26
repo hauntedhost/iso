@@ -42,5 +42,6 @@ fn add_perf(mut commands: Commands) {
         PerfUiRoot { ..default() },
         PerfUiEntryFPS::default(),
         PerfUiEntryEntityCount::default(),
+        Name::new("PerfUi"),
     ));
 }

@@ -157,6 +157,7 @@ fn spawn_player(
             ..default()
         },
         PlayerTag,
+        Name::new("Player"),
     ));
 }
 
@@ -289,6 +290,7 @@ fn spawn_friends(
             FriendTag {
                 player_uuid: player_uuid.clone(),
             },
+            Name::new("Friend"),
         ));
     }
 }

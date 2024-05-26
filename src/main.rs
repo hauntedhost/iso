@@ -9,6 +9,7 @@ mod socket;
 mod terrain;
 
 use bevy::prelude::*;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use cameras::CameraPlugin;
 use collision::CollisionPlugin;
 use debug::DebugPlugin;
@@ -27,6 +28,7 @@ fn main() {
             }),
             ..Default::default()
         }))
+        .add_plugins(WorldInspectorPlugin::new())
         .add_plugins(DebugPlugin::default())
         .add_plugins(SocketPlugin::default())
         .add_plugins(LightingPlugin::default())
