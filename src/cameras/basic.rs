@@ -1,19 +1,16 @@
 use super::SceneCamera;
 use crate::schedule::{PreStartupSet, UpdateSet};
+use bevy::input::mouse::MouseMotion;
 use bevy::pbr::ShadowFilteringMethod;
 use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
-use bevy::time::common_conditions::on_timer;
-use std::time::Duration;
 
 #[derive(Clone, Debug)]
-pub struct Config {
-    pub rotation: bool,
-}
+pub struct Config {}
 
 impl Default for Config {
     fn default() -> Self {
-        Self { rotation: false }
+        Self {}
     }
 }
 
@@ -30,18 +27,14 @@ impl Default for BasicCameraPlugin {
     }
 }
 
+#[derive(Debug, Resource)]
+struct PivotPoint(Vec3);
+
 impl Plugin for BasicCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreStartup, spawn_camera.in_set(PreStartupSet::SpawnWorld));
-
-        if self.config.rotation {
-            app.add_systems(
-                Update,
-                camera_movement
-                    .in_set(UpdateSet::UserInputEffects)
-                    .run_if(on_timer(Duration::from_millis(10))),
-            );
-        }
+        app.insert_resource(PivotPoint(Vec3::ZERO))
+            .add_systems(PreStartup, spawn_camera.in_set(PreStartupSet::SpawnWorld))
+            .add_systems(Update, camera_control.in_set(UpdateSet::UserInputEffects));
     }
 }
 
@@ -66,36 +59,26 @@ fn spawn_camera(mut commands: Commands) {
     ));
 }
 
-fn camera_movement(
-    keyboard_input: Res<ButtonInput<KeyCode>>,
+fn camera_control(
     mut query: Query<&mut Transform, With<SceneCamera>>,
+    mut mouse_motion_events: EventReader<MouseMotion>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    pivot_point: Res<PivotPoint>,
 ) {
-    for mut transform in query.iter_mut() {
-        let mut did_transform = false;
+    if keyboard_input.pressed(KeyCode::SuperLeft) && mouse_button.pressed(MouseButton::Left) {
+        let mut camera_transform = query.single_mut();
 
-        if keyboard_input.pressed(KeyCode::ArrowUp) {
-            did_transform = true;
-            transform.translation.y += 0.25;
-        }
+        for event in mouse_motion_events.read() {
+            let rotation_speed = 0.01;
+            let pivot = pivot_point.0;
 
-        if keyboard_input.pressed(KeyCode::ArrowDown) {
-            did_transform = true;
-            transform.translation.y -= 0.25;
-        }
+            let direction = camera_transform.translation - pivot;
+            let rotation = Quat::from_rotation_y(-event.delta.x * rotation_speed);
+            let new_direction = rotation * direction;
 
-        if keyboard_input.pressed(KeyCode::ArrowLeft) {
-            did_transform = true;
-            transform.translation.x -= 0.25;
-        }
-
-        if keyboard_input.pressed(KeyCode::ArrowRight) {
-            did_transform = true;
-            transform.translation.x += 0.25;
-        }
-
-        if did_transform {
-            transform.look_at(Vec3::ZERO, Vec3::Y);
-            // dbg!(transform);
+            camera_transform.translation = pivot + new_direction;
+            camera_transform.look_at(pivot, Vec3::Y);
         }
     }
 }

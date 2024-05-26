@@ -37,6 +37,7 @@ fn spawn_terrain(
             mesh: meshes.add(Cuboid::new(TERRAIN_WIDTH, TERRAIN_HEIGHT, TERRAIN_DEPTH)),
             material: materials.add(StandardMaterial {
                 base_color: Color::rgb(0.3, 0.5, 0.3),
+                reflectance: 0.01,
                 ..default()
             }),
             // Adjust position so top surface is at y = 0
