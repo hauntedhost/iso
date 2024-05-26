@@ -5,8 +5,9 @@ use bevy::pbr::ShadowFilteringMethod;
 use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
 
+const ANIMATION_SPEED: f32 = 15.0;
 const PIVOT_POINT: Vec3 = Vec3::ZERO;
-const ROTATION_SPEED: f32 = 0.02;
+const USER_ROTATION_SPEED: f32 = 0.02;
 
 #[derive(Clone, Debug)]
 pub struct Config {}
@@ -15,6 +16,11 @@ impl Default for Config {
     fn default() -> Self {
         Self {}
     }
+}
+
+#[derive(Component)]
+struct CameraAnimation {
+    target_position: Vec3,
 }
 
 #[derive(Clone, Debug)]
@@ -35,10 +41,11 @@ impl Plugin for BasicCameraPlugin {
         app.add_systems(PreStartup, spawn_camera.in_set(PreStartupSet::SpawnWorld))
             .add_systems(
                 Update,
-                (camera_control, snap_camera)
+                (handle_user_rotation, insert_snap_animation)
                     .chain()
                     .in_set(UpdateSet::UserInputEffects),
-            );
+            )
+            .add_systems(Update, handle_animation.in_set(UpdateSet::AfterEffects));
     }
 }
 
@@ -63,7 +70,7 @@ fn spawn_camera(mut commands: Commands) {
     ));
 }
 
-fn camera_control(
+fn handle_user_rotation(
     mut query: Query<&mut Transform, With<SceneCamera>>,
     mut mouse_motion_events: EventReader<MouseMotion>,
     mouse_button: Res<ButtonInput<MouseButton>>,
@@ -74,7 +81,7 @@ fn camera_control(
 
         for event in mouse_motion_events.read() {
             let direction = camera_transform.translation - PIVOT_POINT;
-            let rotation = Quat::from_rotation_y(-event.delta.x * ROTATION_SPEED);
+            let rotation = Quat::from_rotation_y(-event.delta.x * USER_ROTATION_SPEED);
             let new_direction = rotation * direction;
 
             camera_transform.translation = PIVOT_POINT + new_direction;
@@ -83,12 +90,13 @@ fn camera_control(
     }
 }
 
-fn snap_camera(
-    mut query: Query<&mut Transform, With<SceneCamera>>,
+fn insert_snap_animation(
+    mut commands: Commands,
+    mut query: Query<(Entity, &Transform), With<SceneCamera>>,
     mouse_button: Res<ButtonInput<MouseButton>>,
 ) {
     if mouse_button.just_released(MouseButton::Left) {
-        let mut camera_transform = query.single_mut();
+        let (entity, camera_transform) = query.single_mut();
         let current_position = camera_transform.translation;
 
         let cardinal_directions = [
@@ -114,8 +122,42 @@ fn snap_camera(
             }
         }
 
-        // Snap the camera to the nearest direction
-        camera_transform.translation = nearest_direction;
-        camera_transform.look_at(PIVOT_POINT, Vec3::Y);
+        // Initiate camera animation to snap to the nearest cardinal direction
+        commands.entity(entity).insert(CameraAnimation {
+            target_position: nearest_direction,
+        });
+    }
+}
+
+fn handle_animation(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Transform, &CameraAnimation), With<SceneCamera>>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    time: Res<Time>,
+) {
+    for (entity, mut transform, animation) in query.iter_mut() {
+        if mouse_button.pressed(MouseButton::Left) {
+            commands.entity(entity).remove::<CameraAnimation>();
+            continue;
+        }
+
+        let direction = animation.target_position - transform.translation;
+        let distance = direction.length();
+        let normalized_direction = if distance > f32::EPSILON {
+            direction.normalize()
+        } else {
+            Vec3::ZERO
+        };
+
+        let movement = normalized_direction * ANIMATION_SPEED * time.delta_seconds();
+
+        if movement.length() >= distance {
+            transform.translation = animation.target_position;
+            commands.entity(entity).remove::<CameraAnimation>();
+        } else {
+            transform.translation += movement;
+        }
+
+        transform.look_at(PIVOT_POINT, Vec3::Y);
     }
 }
